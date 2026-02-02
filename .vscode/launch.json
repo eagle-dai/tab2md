@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run tab2md",
+      "type": "python",
+      "request": "launch",
+      "module": "tab2md.main",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}
