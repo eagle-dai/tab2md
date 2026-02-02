@@ -50,19 +50,50 @@ async def get_active_tab_snapshot():
                 return None, None
 
             ctx = browser.contexts[0]
+            pages = ctx.pages
 
-            # 智能寻找激活的页面
-            target_page = None
-            for page in ctx.pages:
-                if page.url != "about:blank" and not page.url.startswith("devtools://"):
-                    target_page = page
-                    break
-
-            if not target_page:
-                print("❌ No active web page found.")
+            if not pages:
+                print("❌ No pages found in browser.")
                 await browser.close()
                 return None, None
 
+            # === [核心逻辑优化] 寻找当前激活的 Tab ===
+            target_page = None
+            fallback_page = None  # 用于兜底
+
+            print(f"🔍 Scanning {len(pages)} tabs for the active one...")
+
+            for page in pages:
+                # 1. 基础过滤：跳过空白页和 DevTools
+                if page.url == "about:blank" or page.url.startswith("devtools://"):
+                    continue
+
+                # 记录第一个有效的页面作为兜底
+                if fallback_page is None:
+                    fallback_page = page
+
+                try:
+                    # 2. 询问页面状态：只有当前激活的 Tab 状态为 'visible'
+                    visibility = await page.evaluate("document.visibilityState")
+
+                    if visibility == "visible":
+                        target_page = page
+                        print("✅ Found active tab (visible).")
+                        break
+                except Exception:
+                    continue
+
+            # 如果没找到 visible 的，使用兜底页面
+            if not target_page:
+                if fallback_page:
+                    print("⚠️ No visible tab found, using the first valid tab.")
+                    target_page = fallback_page
+                else:
+                    print("❌ No valid web page found.")
+                    await browser.close()
+                    return None, None
+
+            # 获取信息
             title = await target_page.title()
             print(f"🔗 Targeted Tab: {title}")
             print(f"🔗 URL: {target_page.url}")
@@ -100,10 +131,7 @@ async def process_conversion():
     temp_file = Path("temp_snapshot.html").resolve()
     temp_file.write_text(html_with_base, encoding="utf-8")
 
-    # === [关键修复] Windows 路径兼容性 ===
-    # 强制生成 "file://C:/path/to/file" 格式 (双斜杠)
-    # 而不是 "file:///C:/path/to/file" (三斜杠，as_uri() 的默认行为)
-    # 这样 Crawl4AI 切片 url[7:] 后才能得到正确的 "C:/path..."
+    # === [Windows 路径兼容性] ===
     local_file_uri = f"file://{temp_file.as_posix()}"
 
     print("🚀 Running extraction engine (Crawl4AI)...")
@@ -145,15 +173,14 @@ async def process_conversion():
             print(f"\n✅ Conversion Complete!")
             print(f"📂 Saved to: {md_file}")
 
-            # Cleanup
-            try:
-                os.remove(temp_file)
-            except:
-                pass
+            # === Debug: 保留临时文件 (如不需要可取消注释下方代码进行删除) ===
+            # try:
+            #     os.remove(temp_file)
+            # except:
+            #     pass
+            print(f"🐛 Debug: Snapshot kept at {temp_file}")
 
-            # Auto-open (Windows)
-            if sys.platform == "win32":
-                os.system(f"notepad {md_file}")
+            # [已修改] 不再自动打开文件，也不打印内容
         else:
             print(f"❌ Conversion Failed: {result.error_message}")
 
