@@ -179,8 +179,6 @@ async def process_conversion():
             # except:
             #     pass
             print(f"🐛 Debug: Snapshot kept at {temp_file}")
-
-            # [已修改] 不再自动打开文件，也不打印内容
         else:
             print(f"❌ Conversion Failed: {result.error_message}")
 
