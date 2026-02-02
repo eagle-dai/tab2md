@@ -37,8 +37,9 @@ async def get_active_tab_snapshot():
                 await browser.close()
                 return None, None
 
-            ctx = browser.contexts[0]
-            pages = ctx.pages
+            pages = []
+            for ctx in browser.contexts:
+                pages.extend(ctx.pages)
 
             if not pages:
                 print("❌ 浏览器中没有打开的页面。")
@@ -59,6 +60,11 @@ async def get_active_tab_snapshot():
 
                 try:
                     visibility = await page.evaluate("document.visibilityState")
+                    has_focus = await page.evaluate("document.hasFocus()")
+                    if has_focus:
+                        target_page = page
+                        print("✅ 找到激活的标签页 (hasFocus)。")
+                        break
                     if visibility == "visible":
                         target_page = page
                         print("✅ 找到激活的标签页 (visible)。")
