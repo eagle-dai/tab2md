@@ -22,7 +22,7 @@ class GeekbangColumnStrategy(BasicStrategy):
         # 网页原始结构是用 div 模拟代码块，Markdown 转换器无法识别。
         # 我们在提取前，用 JS 将其强制转换为标准的 <pre><code> 标签。
         config.js_code = """
-            // 1. 处理代码块
+            // --- 处理代码块 ---
             // 找到所有 Slate 伪装的代码块容器
             const blocks = document.querySelectorAll('div[data-slate-type="pre"]');
 
@@ -51,7 +51,42 @@ class GeekbangColumnStrategy(BasicStrategy):
                 block.parentNode.replaceChild(pre, block);
             });
 
-            // 2. 智能列表修复 v4
+            // --- 修复丢失的加粗格式 ---
+            // 使用 getComputedStyle 捕捉所有形式的加粗 (Inline Style 或 CSS Class)
+            (function() {
+                const editor = document.querySelector("div[data-slate-editor='true']");
+                if (!editor) return;
+
+                // 转换为数组以安全遍历
+                const spans = Array.from(editor.querySelectorAll('span'));
+
+                spans.forEach(span => {
+                    // [核心修改] 获取最终计算样式，而非仅检查 style 属性
+                    const computed = window.getComputedStyle(span);
+                    const weight = computed.fontWeight; // 返回如 "700" 或 "bold"
+                    
+                    // 判定标准：bold(700), bolder, 或数值 >= 600
+                    // 注意：parseInt('bold') 会是 NaN，所以需要分别判断
+                    const isBold = (
+                        weight === 'bold' || 
+                        weight === 'bolder' || 
+                        (!isNaN(parseInt(weight)) && parseInt(weight) >= 600)
+                    );
+
+                    if (isBold) {
+                        const strong = document.createElement('strong');
+                        // 保留 span 内部的文字和潜在的其他格式
+                        strong.innerHTML = span.innerHTML;
+                        
+                        // 如果 span 有特定类名可能影响布局，但在 Markdown 转换中我们只关心语义
+                        if (span.parentNode) {
+                            span.parentNode.replaceChild(strong, span);
+                        }
+                    }
+                });
+            })();
+
+            // --- 智能列表修复 ---
             (function() {
                 // 触发词：你将能够、主要包括、学习目标等
                 const triggers = ['你将能够：', '你将能够:', '主要包括：', '通过本节课的学习'];
@@ -71,7 +106,7 @@ class GeekbangColumnStrategy(BasicStrategy):
                         itemsCount = 0;
                         continue; 
                     }
-                    
+
                     // B. 处于列表区域中，进行智能判断
                     if (activeTrigger) {
                         // 1. 找到承载文本的容器
