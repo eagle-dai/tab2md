@@ -1,7 +1,5 @@
 import asyncio
-import os
 import re
-import sys
 import subprocess
 from pathlib import Path
 from playwright.async_api import async_playwright
@@ -170,7 +168,7 @@ async def process_conversion():
             md_file = output_path / f"{safe_name}.md"
             md_file.write_text(result.markdown, encoding="utf-8")
 
-            print(f"\n✅ Conversion Complete!")
+            print("\n✅ Conversion Complete!")
             print(f"📂 Saved to: {md_file}")
 
             # === Debug: 保留临时文件 (如不需要可取消注释下方代码进行删除) ===
