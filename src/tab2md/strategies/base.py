@@ -28,8 +28,8 @@ class BaseStrategy(ABC):
         temp_file = Path("temp_snapshot.html").resolve()
         temp_file.write_text(html_with_base, encoding="utf-8")
 
-        # Windows 路径兼容性
-        local_file_uri = f"file://{temp_file.as_posix()}"
+        # 使用标准库生成跨平台 file URI
+        local_file_uri = temp_file.as_uri()
 
         # 2. 获取配置 (由子类实现)
         browser_cfg = BrowserConfig(headless=True, verbose=False)
