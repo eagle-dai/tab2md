@@ -48,33 +48,62 @@ async def get_active_tab_snapshot():
 
             target_page = None
             fallback_page = None
+            best_score = None
 
             print(f"🔍 正在扫描 {len(pages)} 个标签页以寻找激活页...")
 
             for page in pages:
-                if page.url == "about:blank" or page.url.startswith("devtools://"):
+                if page.url.startswith("devtools://"):
                     continue
 
                 if fallback_page is None:
                     fallback_page = page
 
                 try:
-                    visibility = await page.evaluate("document.visibilityState")
-                    has_focus = await page.evaluate("document.hasFocus()")
-                    if has_focus:
-                        target_page = page
-                        print("✅ 找到激活的标签页 (hasFocus)。")
-                        break
-                    if visibility == "visible":
-                        target_page = page
-                        print("✅ 找到激活的标签页 (visible)。")
-                        break
+                    state = await page.evaluate(
+                        """() => ({
+                            visibility: document.visibilityState,
+                            hasFocus: document.hasFocus(),
+                            hidden: document.hidden
+                        })"""
+                    )
+                    visibility = state.get("visibility")
+                    has_focus = state.get("hasFocus")
                 except Exception:
-                    continue
+                    visibility = "unknown"
+                    has_focus = False
+
+                score = 0
+                if has_focus:
+                    score += 3
+                if visibility == "visible":
+                    score += 2
+                if visibility == "prerender":
+                    score += 1
+                if page.url == "about:blank":
+                    score -= 1
+
+                try:
+                    title = await page.title()
+                except Exception:
+                    title = "(unknown title)"
+
+                print(
+                    "🧭 标签页评分:",
+                    f"title={title!r}",
+                    f"url={page.url}",
+                    f"visibility={visibility}",
+                    f"hasFocus={has_focus}",
+                    f"score={score}",
+                )
+
+                if best_score is None or score > best_score:
+                    best_score = score
+                    target_page = page
 
             if not target_page:
                 if fallback_page:
-                    print("⚠️ 未找到可见标签页，使用第一个有效标签页作为兜底。")
+                    print("⚠️ 未找到明确的激活标签页，使用第一个有效标签页作为兜底。")
                     target_page = fallback_page
                 else:
                     print("❌ 未找到有效网页。")
