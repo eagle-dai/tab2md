@@ -1,16 +1,25 @@
 # Tool: tab2md
 
-## Description
+## Description (描述)
 
-A bridge utility that allows AI Agents to "see" what the user is currently viewing in their browser. It captures the DOM state of the active tab (bypassing auth walls) and transforms it into semantic Markdown.
+一个连接本地浏览器与 AI Agent 的桥梁工具。它允许 Agent "看到" 用户当前正在浏览的内容。
+该工具通过 CDP 协议捕获当前激活标签页的 DOM 状态（自动绕过登录墙），并利用**策略路由引擎**将其转换为语义化的 Markdown。
 
-## Usage
+## Capabilities (能力)
+
+1.  **实时快照:** 获取当前用户视角的完整渲染 HTML (支持 SPA)。
+2.  **智能路由:** 根据 URL 自动选择最佳的解析策略 (Strategy Pattern)。
+    - _通用模式:_ 适用于大多数网页的兜底提取。
+    - _专用模式:_ 针对特定域名（如 Wiki, 文档站）应用深度优化的 CSS 选择器和清洗规则。
+3.  **零干扰:** 复用用户已打开的浏览器实例，无需重新登录。
+
+## Usage (用法)
 
 - **Command:** `uv run tab2md`
-- **Context:** Requires a local Chromium browser running on port 9222.
-- **Output:** Returns a local file path to the generated Markdown.
+- **Context:** 需要本地运行在 9222 端口的 Chromium 浏览器。
+- **Output:** 返回生成的 Markdown 文件的本地绝对路径。
 
-## Best Practices
+## Integration Notes (集成说明)
 
-- Use this when the user asks to "summarize this page" or "extract code from this tab".
-- It handles dynamic JS content (SPA) and authenticated sessions automatically.
+- 当用户请求 "总结当前页面" 或 "提取此页面的代码" 时调用此工具。
+- 如果提取结果包含过多噪音（广告、导航栏），说明该网站可能需要一个专用策略 (`strategies/xxx.py`)。建议提示用户或开发者添加相应的策略文件。
