@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
+import os
 from crawl4ai import AsyncWebCrawler
 from crawl4ai.async_configs import BrowserConfig, CrawlerRunConfig
 
@@ -30,6 +31,14 @@ class BaseStrategy(ABC):
 
         # 使用标准库生成跨平台 file URI
         local_file_uri = temp_file.as_uri()
+
+        # Windows 兼容性修复:
+        # pathlib 生成的是 file:///C:/... (3个斜杠)
+        # crawl4ai 内部逻辑是 url[7:]，会导致路径变为 /C:/... (带前导斜杠)
+        # 这在 Windows 上会导致 os.path.exists 失败。
+        # 因此我们需要手动将其调整为 file://C:/... (以便切片后得到 C:/...)
+        if os.name == "nt":
+            local_file_uri = local_file_uri.replace("file:///", "file://")
 
         # 2. 获取配置 (由子类实现)
         browser_cfg = BrowserConfig(headless=True, verbose=False)
