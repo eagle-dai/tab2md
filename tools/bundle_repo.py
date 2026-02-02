@@ -1,4 +1,5 @@
 """Bundle important repository files into a Markdown document with inline contents."""
+
 from __future__ import annotations
 
 import argparse
@@ -8,8 +9,20 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 IGNORED_DIR_NAMES = {"__pycache__", ".git", "node_modules", "dist", "build"}
-IGNORED_SUFFIXES = {".ico", ".svg", ".png", ".pyc", ".pyo", ".exe", ".dll", ".so", ".dylib", ".bin", ".class"}
-IGNORED_FILE_NAMES = {"AGENTS.md", ".env", ".env.example", "package-lock.json", ".gitignore"}
+IGNORED_SUFFIXES = {
+    ".ico",
+    ".svg",
+    ".png",
+    ".pyc",
+    ".pyo",
+    ".exe",
+    ".dll",
+    ".so",
+    ".dylib",
+    ".bin",
+    ".class",
+}
+IGNORED_FILE_NAMES = {".env", ".env.example", "package-lock.json", ".gitignore"}
 DEFAULT_TARGETS = [
     "src",
     "README.md",
