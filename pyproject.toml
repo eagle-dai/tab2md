@@ -1,0 +1,18 @@
+[project]
+name = "tab2md"
+version = "0.1.0"
+description = "Convert your active browser tab (authenticated/SPA) to clean Markdown for LLMs."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "crawl4ai>=0.4.0",
+    "playwright>=1.40.0",
+]
+
+[project.scripts]
+# 以后直接运行 `uv run tab2md`
+tab2md = "tab2md.main:entry_point"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
