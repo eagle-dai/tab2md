@@ -5,6 +5,7 @@ from pathlib import Path
 # 导入自定义模块
 from .browser_ops import ensure_chromium_installed, get_active_tab_snapshot
 from .strategies.basic import BasicStrategy
+from .strategies.geekbang import GeekbangColumnStrategy
 # 将来可以在这里导入更多策略，例如: from strategies.wiki import WikiStrategy
 
 OUTPUT_DIR = "exports"
@@ -17,7 +18,7 @@ def get_strategy_for_url(url: str):
     """
     # 注册你的特定策略类 (优先匹配特定策略)
     # known_strategies = [WikiStrategy, CsdnStrategy, ...]
-    known_strategies = []
+    known_strategies = [GeekbangColumnStrategy]
 
     for strategy_cls in known_strategies:
         if strategy_cls.match(url):
