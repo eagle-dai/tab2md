@@ -1,184 +1,59 @@
 import asyncio
 import re
-import subprocess
 from pathlib import Path
-from playwright.async_api import async_playwright
-from crawl4ai import AsyncWebCrawler
-from crawl4ai.async_configs import BrowserConfig, CrawlerRunConfig, CacheMode
 
-# === Configuration ===
-# 强制使用 IPv4 127.0.0.1 避免 Windows 下的 IPv6 问题
-DEBUG_PORT_URL = "http://127.0.0.1:9222"
+# 导入自定义模块
+from .browser_ops import ensure_chromium_installed, get_active_tab_snapshot
+from .strategies.basic import BasicStrategy
+# 将来可以在这里导入更多策略，例如: from strategies.wiki import WikiStrategy
+
 OUTPUT_DIR = "exports"
 
 
-def ensure_chromium_installed():
-    """Check and auto-install Chromium if needed."""
-    try:
-        subprocess.run(
-            ["playwright", "install", "chromium"],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-        )
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        pass  # Silently fail or rely on user manual install
-
-
-async def get_active_tab_snapshot():
+def get_strategy_for_url(url: str):
     """
-    Connect to the running browser (Edge/Chrome) via CDP
-    and capture the DOM of the active tab.
+    简单的策略路由工厂。
+    遍历所有已知策略，找到第一个匹配的；如果没找到，返回 BasicStrategy。
     """
-    try:
-        async with async_playwright() as p:
-            try:
-                # 尝试连接到调试端口
-                browser = await p.chromium.connect_over_cdp(DEBUG_PORT_URL)
-            except Exception:
-                print(f"❌ Connection Failed: Could not connect to {DEBUG_PORT_URL}")
-                print(
-                    "⚠️  Ensure your browser is started with: --remote-debugging-port=9222"
-                )
-                return None, None
+    # 注册你的特定策略类 (优先匹配特定策略)
+    # known_strategies = [WikiStrategy, CsdnStrategy, ...]
+    known_strategies = []
 
-            if not browser.contexts:
-                print("❌ No browser context found.")
-                await browser.close()
-                return None, None
+    for strategy_cls in known_strategies:
+        if strategy_cls.match(url):
+            return strategy_cls()
 
-            ctx = browser.contexts[0]
-            pages = ctx.pages
-
-            if not pages:
-                print("❌ No pages found in browser.")
-                await browser.close()
-                return None, None
-
-            # === [核心逻辑优化] 寻找当前激活的 Tab ===
-            target_page = None
-            fallback_page = None  # 用于兜底
-
-            print(f"🔍 Scanning {len(pages)} tabs for the active one...")
-
-            for page in pages:
-                # 1. 基础过滤：跳过空白页和 DevTools
-                if page.url == "about:blank" or page.url.startswith("devtools://"):
-                    continue
-
-                # 记录第一个有效的页面作为兜底
-                if fallback_page is None:
-                    fallback_page = page
-
-                try:
-                    # 2. 询问页面状态：只有当前激活的 Tab 状态为 'visible'
-                    visibility = await page.evaluate("document.visibilityState")
-
-                    if visibility == "visible":
-                        target_page = page
-                        print("✅ Found active tab (visible).")
-                        break
-                except Exception:
-                    continue
-
-            # 如果没找到 visible 的，使用兜底页面
-            if not target_page:
-                if fallback_page:
-                    print("⚠️ No visible tab found, using the first valid tab.")
-                    target_page = fallback_page
-                else:
-                    print("❌ No valid web page found.")
-                    await browser.close()
-                    return None, None
-
-            # 获取信息
-            title = await target_page.title()
-            print(f"🔗 Targeted Tab: {title}")
-            print(f"🔗 URL: {target_page.url}")
-
-            # 抓取完整渲染后的 HTML
-            content = await target_page.content()
-            url = target_page.url
-
-            # 使用 close() 断开连接 (不会关闭 Edge 窗口)
-            await browser.close()
-
-            return url, content
-
-    except Exception as e:
-        print(f"🔥 Error during snapshot: {e}")
-        return None, None
-
-
-def inject_base_tag(html: str, url: str) -> str:
-    """Inject <base> tag to fix relative links."""
-    base_tag = f'<base href="{url}">'
-    if "<head>" in html:
-        return html.replace("<head>", f"<head>\n{base_tag}", 1)
-    return f"<html><head>{base_tag}</head>" + html
+    return BasicStrategy()
 
 
 async def process_conversion():
-    # 1. Capture Snapshot
+    # 1. 获取快照
     url, raw_html = await get_active_tab_snapshot()
     if not raw_html:
         return
 
-    # 2. Prepare Local File
-    html_with_base = inject_base_tag(raw_html, url)
-    temp_file = Path("temp_snapshot.html").resolve()
-    temp_file.write_text(html_with_base, encoding="utf-8")
+    # 2. 选择策略
+    strategy = get_strategy_for_url(url)
 
-    # === [Windows 路径兼容性] ===
-    local_file_uri = f"file://{temp_file.as_posix()}"
+    try:
+        # 3. 执行转换
+        markdown_content = await strategy.execute(url, raw_html)
 
-    print("🚀 Running extraction engine (Crawl4AI)...")
+        # 4. 保存结果
+        slug = re.sub(r"[^a-zA-Z0-9]", "_", url.split("//")[-1])
+        safe_name = f"{slug[:50]}"
 
-    # 3. Configure Extraction
-    browser_cfg = BrowserConfig(headless=True, verbose=False)
-    run_cfg = CrawlerRunConfig(
-        cache_mode=CacheMode.BYPASS,
-        magic=True,
-        word_count_threshold=5,
-        excluded_tags=[
-            "nav",
-            "footer",
-            "aside",
-            "script",
-            "style",
-            "iframe",
-            "form",
-            "noscript",
-            "svg",
-        ],
-    )
+        output_path = Path(OUTPUT_DIR)
+        output_path.mkdir(exist_ok=True)
 
-    # 4. Run Conversion
-    async with AsyncWebCrawler(config=browser_cfg) as crawler:
-        result = await crawler.arun(url=local_file_uri, config=run_cfg)
+        md_file = output_path / f"{safe_name}.md"
+        md_file.write_text(markdown_content, encoding="utf-8")
 
-        if result.success:
-            # Generate Safe Filename
-            slug = re.sub(r"[^a-zA-Z0-9]", "_", url.split("//")[-1])
-            safe_name = f"{slug[:50]}"
+        print("\n✅ 转换完成!")
+        print(f"📂 已保存至: {md_file}")
 
-            output_path = Path(OUTPUT_DIR)
-            output_path.mkdir(exist_ok=True)
-
-            md_file = output_path / f"{safe_name}.md"
-            md_file.write_text(result.markdown, encoding="utf-8")
-
-            print("\n✅ Conversion Complete!")
-            print(f"📂 Saved to: {md_file}")
-
-            # === Debug: 保留临时文件 (如不需要可取消注释下方代码进行删除) ===
-            # try:
-            #     os.remove(temp_file)
-            # except:
-            #     pass
-            print(f"🐛 Debug: Snapshot kept at {temp_file}")
-        else:
-            print(f"❌ Conversion Failed: {result.error_message}")
+    except Exception as e:
+        print(f"❌ 处理过程中发生错误: {e}")
 
 
 def entry_point():
